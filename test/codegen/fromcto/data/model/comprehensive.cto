@@ -63,6 +63,22 @@ map ProfileIndex {
     o String
 }
 
+@description("priority lookup")
+map PriorityIndex {
+    @description("priority-key")
+    o String
+    @description("priority-value")
+    o Priority
+}
+
+@description("metrics lookup")
+map MetricsById {
+    @description("metrics-key")
+    o String
+    @description("metrics-value")
+    o Metrics
+}
+
 // ---------------------------------------------------------------------------
 // Abstract base concept
 // ---------------------------------------------------------------------------
@@ -98,6 +114,8 @@ participant User identified by userId {
     o EmailAddress email                  // scalar field
     o Priority     role                   // enum field
     o TagMap       tags        optional   // map field
+    o PriorityIndex roleHistory optional  // enum map field
+    o MetricsById metricsById optional    // concept map field
 }
 
 // ---------------------------------------------------------------------------
