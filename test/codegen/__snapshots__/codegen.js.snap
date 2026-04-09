@@ -6608,7 +6608,7 @@ export enum TShirtSizeType {
    LARGE = 'LARGE',
 }
 
-export type EmployeeTShirtSizes = Map<string, ITShirtSizeType>;
+export type EmployeeTShirtSizes = Map<string, TShirtSizeType>;
 
 export interface IAddress extends IConcept {
    street: string;
@@ -6636,7 +6636,7 @@ exports[`codegen #formats check we can convert all formats from namespace unvers
 // Generated code for namespace: org.acme.hr
 
 // imports
-import {IAddress,IEmployeeTShirtSizes,SSN} from './org.acme.hr.base';
+import {IAddress,EmployeeTShirtSizes,SSN} from './org.acme.hr.base';
 import {IDecorator} from './concerto.decorator@1.0.0';
 import {IConcept,IAsset,IParticipant,IEvent,ITransaction} from './concerto@1.0.0';
 
@@ -14404,7 +14404,7 @@ export enum TShirtSizeType {
    LARGE = 'LARGE',
 }
 
-export type EmployeeTShirtSizes = Map<string, ITShirtSizeType>;
+export type EmployeeTShirtSizes = Map<string, TShirtSizeType>;
 
 export interface IAddress extends IConcept {
    street: string;
@@ -14432,7 +14432,7 @@ exports[`codegen #formats check we can convert all formats from namespace versio
 // Generated code for namespace: org.acme.hr@1.0.0
 
 // imports
-import {IAddress,IEmployeeTShirtSizes,SSN} from './org.acme.hr.base@1.0.0';
+import {IAddress,EmployeeTShirtSizes,SSN} from './org.acme.hr.base@1.0.0';
 import {IDecorator} from './concerto.decorator@1.0.0';
 import {IConcept,IAsset,IParticipant,IEvent,ITransaction} from './concerto@1.0.0';
 
