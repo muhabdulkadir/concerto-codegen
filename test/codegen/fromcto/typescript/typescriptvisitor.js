@@ -318,7 +318,7 @@ describe('TypescriptVisitor', function () {
             acceptSpy.withArgs(typescriptVisitor, param).calledTwice.should.be.ok;
         });
 
-        it('should write lines for the imports of direct subclasses that are not in the same namespace', () => {
+        it('should not import direct subclasses from other namespaces', () => {
             let acceptSpy = sinon.spy();
 
             let mockSubclassDeclaration1 = sinon.createStubInstance(ClassDeclaration);
@@ -363,13 +363,11 @@ describe('TypescriptVisitor', function () {
             typescriptVisitor.visitModelFile(mockModelFile, param);
 
             param.fileWriter.openFile.withArgs('org.acme.ts').calledOnce.should.be.ok;
-            param.fileWriter.writeLine.callCount.should.deep.equal(6);
+            param.fileWriter.writeLine.callCount.should.deep.equal(4);
             param.fileWriter.writeLine.getCall(0).args.should.deep.equal([0, '/* eslint-disable @typescript-eslint/no-empty-interface */']);
             param.fileWriter.writeLine.getCall(1).args.should.deep.equal([0, '// Generated code for namespace: org.acme']);
             param.fileWriter.writeLine.getCall(2).args.should.deep.equal([0, '\n// imports']);
-            param.fileWriter.writeLine.getCall(3).args.should.deep.equal([0, '\n// Warning: Beware of circular dependencies when modifying these imports']);
-            param.fileWriter.writeLine.getCall(4).args.should.deep.equal([0, 'import type {\n\tIImportedDirectSubclass,\n\tIImportedDirectSubclass2\n} from \'./org.acme.subclasses\';']);
-            param.fileWriter.writeLine.getCall(5).args.should.deep.equal([0, '\n// interfaces']);
+            param.fileWriter.writeLine.getCall(3).args.should.deep.equal([0, '\n// interfaces']);
             param.fileWriter.closeFile.calledOnce.should.be.ok;
 
             acceptSpy.withArgs(typescriptVisitor, param).calledOnce.should.be.ok;
@@ -518,7 +516,7 @@ describe('TypescriptVisitor', function () {
             param.fileWriter.writeLine.getCall(1).args.should.deep.equal([0, '}\n']);
         });
 
-        it('should create a union given a class that has dependencies but no super class', () => {
+        it('should create a union given a class that has more than one same-namespace subclass', () => {
             let acceptSpy = sinon.spy();
 
             let mockChildClassDeclaration = sinon.createStubInstance(ClassDeclaration);
@@ -532,6 +530,19 @@ describe('TypescriptVisitor', function () {
             mockChildClassDeclaration.getName.returns('Child');
             mockChildClassDeclaration.isAbstract.returns(false);
             mockChildClassDeclaration.getSuperType.returns('Parent');
+            mockChildClassDeclaration.getNamespace.returns('org.acme');
+            mockChildClassDeclaration.getModelFile.returns({ getNamespace: () => 'org.acme' });
+
+            let mockSecondChildClassDeclaration = sinon.createStubInstance(ClassDeclaration);
+            mockSecondChildClassDeclaration.isClassDeclaration.returns(true);
+            mockSecondChildClassDeclaration.getOwnProperties.returns([{
+                accept: acceptSpy
+            }]);
+            mockSecondChildClassDeclaration.getName.returns('ChildTwo');
+            mockSecondChildClassDeclaration.isAbstract.returns(false);
+            mockSecondChildClassDeclaration.getSuperType.returns('Parent');
+            mockSecondChildClassDeclaration.getNamespace.returns('org.acme');
+            mockSecondChildClassDeclaration.getModelFile.returns({ getNamespace: () => 'org.acme' });
 
             let mockClassDeclaration = sinon.createStubInstance(ClassDeclaration);
             mockClassDeclaration.isClassDeclaration.returns(true);
@@ -544,7 +555,9 @@ describe('TypescriptVisitor', function () {
             mockClassDeclaration.getName.returns('Parent');
             mockClassDeclaration.isAbstract.returns(true);
             mockClassDeclaration.getSuperType.returns(null);
-            mockClassDeclaration.getDirectSubclasses.returns([mockChildClassDeclaration]);
+            mockClassDeclaration.getNamespace.returns('org.acme');
+            mockClassDeclaration.getModelFile.returns({ getNamespace: () => 'org.acme' });
+            mockClassDeclaration.getDirectSubclasses.returns([mockChildClassDeclaration, mockSecondChildClassDeclaration]);
 
             typescriptVisitor.visitClassDeclaration(mockClassDeclaration, param);
 
@@ -552,7 +565,32 @@ describe('TypescriptVisitor', function () {
             param.fileWriter.writeLine.getCall(0).args.should.deep.equal([0, 'export interface IParent {']);
             param.fileWriter.writeLine.getCall(1).args.should.deep.equal([1, '$class: string;']);
             param.fileWriter.writeLine.getCall(2).args.should.deep.equal([0, '}\n']);
-            param.fileWriter.writeLine.getCall(3).args.should.deep.equal([0, 'export type ParentUnion = IChild;\n']);
+            param.fileWriter.writeLine.getCall(3).args.should.deep.equal([0, 'export type ParentUnion = IChild | \nIChildTwo;\n']);
+        });
+
+        it('should not create a union for subclasses from a different namespace', () => {
+            let acceptSpy = sinon.spy();
+
+            let mockChildClassDeclaration = sinon.createStubInstance(ClassDeclaration);
+            mockChildClassDeclaration.getOwnProperties.returns([{ accept: acceptSpy }]);
+            mockChildClassDeclaration.getName.returns('Child');
+            mockChildClassDeclaration.getNamespace.returns('org.other');
+            mockChildClassDeclaration.getModelFile.returns({ getNamespace: () => 'org.other' });
+
+            let mockClassDeclaration = sinon.createStubInstance(ClassDeclaration);
+            mockClassDeclaration.getOwnProperties.returns([{ accept: acceptSpy }]);
+            mockClassDeclaration.getName.returns('Parent');
+            mockClassDeclaration.getSuperType.returns(null);
+            mockClassDeclaration.getNamespace.returns('org.acme');
+            mockClassDeclaration.getModelFile.returns({ getNamespace: () => 'org.acme' });
+            mockClassDeclaration.getDirectSubclasses.returns([mockChildClassDeclaration]);
+
+            typescriptVisitor.visitClassDeclaration(mockClassDeclaration, param);
+
+            param.fileWriter.writeLine.callCount.should.deep.equal(3);
+            param.fileWriter.writeLine.getCall(0).args.should.deep.equal([0, 'export interface IParent {']);
+            param.fileWriter.writeLine.getCall(1).args.should.deep.equal([1, '$class: string;']);
+            param.fileWriter.writeLine.getCall(2).args.should.deep.equal([0, '}\n']);
         });
 
         it('should not create a union if a class has no sub-classes', () => {
@@ -719,26 +757,71 @@ describe('TypescriptVisitor', function () {
             param.fileWriter.writeLine.withArgs(1, 'literalTest = EnumType.MyEnumValue;').calledOnce.should.be.ok;
         });
 
-        it('should write a line for field name using a union type when the flattenSubclassesToUnion parameter is set', () => {
+        it('should write a line for field name using a union type when the flattenSubclassesToUnion parameter is set and there are multiple same-namespace subclasses', () => {
+            const mockField = sinon.createStubInstance(Field);
+            mockField.isPrimitive.returns(false);
+            mockField.isArray.returns(false);
+            mockField.isOptional.returns(false);
+            mockField.isTypeScalar.returns(false);
+            mockField.getName.returns('flattenSubclassesTest');
+            mockField.getType.returns('Animal');
+            mockField.getDecorators.returns([]);
+            mockField.getFullyQualifiedTypeName.returns('org.acme.Animal');
+
+            const mockModelManager = sinon.createStubInstance(ModelManager);
+            const mockModelFile = sinon.createStubInstance(ModelFile);
+            mockModelFile.getNamespace.returns('org.acme');
+            const mockClassDeclaration = sinon.createStubInstance(ClassDeclaration);
+            mockClassDeclaration.getNamespace.returns('org.acme');
+            const mockSubclass = sinon.createStubInstance(ClassDeclaration);
+            mockSubclass.getNamespace.returns('org.acme');
+            mockSubclass.getModelFile.returns({ getNamespace: () => 'org.acme' });
+            mockSubclass.isEnum.returns(false);
+            const mockSecondSubclass = sinon.createStubInstance(ClassDeclaration);
+            mockSecondSubclass.getNamespace.returns('org.acme');
+            mockSecondSubclass.getModelFile.returns({ getNamespace: () => 'org.acme' });
+            mockSecondSubclass.isEnum.returns(false);
+            mockClassDeclaration.getDirectSubclasses.returns([mockSubclass, mockSecondSubclass]);
+
+            mockModelManager.getType.returns(mockClassDeclaration);
+            mockClassDeclaration.isEnum.returns(false);
+            mockClassDeclaration.isMapDeclaration.returns(false);
+            mockModelFile.getModelManager.returns(mockModelManager);
+            mockClassDeclaration.getModelFile.returns(mockModelFile);
+            mockField.getParent.returns(mockClassDeclaration);
+            typescriptVisitor.visitField(mockField, { ...param, flattenSubclassesToUnion: true, aliasedTypesMap: new Map() });
+
+            param.fileWriter.writeLine.calledWith(1, 'flattenSubclassesTest: AnimalUnion;').should.be.ok;
+        });
+
+        it('should not use a union type when only cross-namespace subclasses exist', () => {
             const mockField = sinon.createStubInstance(Field);
             mockField.isPrimitive.returns(false);
             mockField.getName.returns('flattenSubclassesTest');
             mockField.getType.returns('Animal');
             mockField.getDecorators.returns([]);
+            mockField.getFullyQualifiedTypeName.returns('org.other.Animal');
 
             const mockModelManager = sinon.createStubInstance(ModelManager);
             const mockModelFile = sinon.createStubInstance(ModelFile);
-            const mockClassDeclaration = sinon.createStubInstance(ClassDeclaration);
-            mockClassDeclaration.getDirectSubclasses.returns(['blah']); // Not valid, but sufficient for this test
+            const mockParentClassDeclaration = sinon.createStubInstance(ClassDeclaration);
+            const mockReferencedDeclaration = sinon.createStubInstance(ClassDeclaration);
+            const mockSubclass = sinon.createStubInstance(ClassDeclaration);
 
-            mockModelManager.getType.returns(mockClassDeclaration);
-            mockClassDeclaration.isEnum.returns(false);
+            mockSubclass.getNamespace.returns('org.another');
+            mockSubclass.getModelFile.returns({ getNamespace: () => 'org.another' });
+            mockReferencedDeclaration.getNamespace.returns('org.other');
+            mockReferencedDeclaration.getModelFile.returns({ getNamespace: () => 'org.other' });
+            mockReferencedDeclaration.getDirectSubclasses.returns([mockSubclass]);
+            mockReferencedDeclaration.isEnum.returns(false);
+            mockModelManager.getType.returns(mockReferencedDeclaration);
             mockModelFile.getModelManager.returns(mockModelManager);
-            mockClassDeclaration.getModelFile.returns(mockModelFile);
-            mockField.getParent.returns(mockClassDeclaration);
+            mockParentClassDeclaration.getModelFile.returns(mockModelFile);
+            mockField.getParent.returns(mockParentClassDeclaration);
+
             typescriptVisitor.visitField(mockField, { ...param, flattenSubclassesToUnion: true });
 
-            param.fileWriter.writeLine.withArgs(1, 'flattenSubclassesTest: AnimalUnion;').calledOnce.should.be.ok;
+            param.fileWriter.writeLine.withArgs(1, 'flattenSubclassesTest: IAnimal;').calledOnce.should.be.ok;
         });
     });
 
@@ -755,6 +838,52 @@ describe('TypescriptVisitor', function () {
             typescriptVisitor.visitEnumValueDeclaration(mockEnumValueDeclaration, param);
 
             param.fileWriter.writeLine.withArgs(1, 'Bob = \'Bob\',').calledOnce.should.be.ok;
+        });
+    });
+
+    describe('visitScalarDeclaration', () => {
+        it('should emit an export type alias for a String scalar', () => {
+            const param = { fileWriter: mockFileWriter };
+            const mockScalar = sinon.createStubInstance(ScalarDeclaration);
+            mockScalar.getName.returns('SSN');
+            mockScalar.getType.returns('String');
+            typescriptVisitor.visitScalarDeclaration(mockScalar, param);
+            param.fileWriter.writeLine.withArgs(0, 'export type SSN = string;\n').calledOnce.should.be.ok;
+        });
+
+        it('should emit an export type alias for a DateTime scalar', () => {
+            const param = { fileWriter: mockFileWriter };
+            const mockScalar = sinon.createStubInstance(ScalarDeclaration);
+            mockScalar.getName.returns('ImportantDate');
+            mockScalar.getType.returns('DateTime');
+            typescriptVisitor.visitScalarDeclaration(mockScalar, param);
+            param.fileWriter.writeLine.withArgs(0, 'export type ImportantDate = Date;\n').calledOnce.should.be.ok;
+        });
+    });
+
+    describe('visitField', () => {
+        it('should write a line using the named scalar type, not the underlying primitive', () => {
+            const param = { fileWriter: mockFileWriter };
+            const mockField = sinon.createStubInstance(Field);
+            mockField.isTypeScalar.returns(true);
+            mockField.getName.returns('ssn');
+            mockField.isArray.returns(false);
+            mockField.isOptional.returns(false);
+            mockField.getFullyQualifiedTypeName.returns('org.acme.hr.base.SSN');
+            typescriptVisitor.visitField(mockField, param);
+            param.fileWriter.writeLine.withArgs(1, 'ssn: SSN;').calledOnce.should.be.ok;
+        });
+
+        it('should handle optional array scalar fields', () => {
+            const param = { fileWriter: mockFileWriter };
+            const mockField = sinon.createStubInstance(Field);
+            mockField.isTypeScalar.returns(true);
+            mockField.getName.returns('aliases');
+            mockField.isArray.returns(true);
+            mockField.isOptional.returns(true);
+            mockField.getFullyQualifiedTypeName.returns('org.acme.hr.base.SSN');
+            typescriptVisitor.visitField(mockField, param);
+            param.fileWriter.writeLine.withArgs(1, 'aliases?: SSN[];').calledOnce.should.be.ok;
         });
     });
 
